@@ -40,7 +40,7 @@ public class Node {
                 initiateElection();
             }
 
-        // Main loop will be added later
+            // Main loop will be added later
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -57,7 +57,7 @@ public class Node {
                     // handleReceivedMessage(message); // Will be implemented next
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                    e.printStackTrace();
             }
         }
     }
@@ -79,4 +79,93 @@ public class Node {
         Node node = new Node(nodeId, port, otherNodePorts);
         node.startNode();
     }
+
+    private void handleReceivedMessage(String message) {
+        String[] parts = message.split(":");
+        String command = parts[0];
+
+        switch (command) {
+            case "ELECTION":
+                int senderId = Integer.parseInt(parts[1]);
+                System.out.println("Node " + nodeId + " received election message from Node " + senderId);
+                if (senderId < nodeId) {
+                    sendMessageToNode(otherNodePorts.get(senderId - 1), "OK:" + nodeId);
+                    if (!electionInProgress && leaderId == -1) {
+                        electionInProgress = true;
+                        initiateElection();
+                    }
+                }
+                break;
+
+            case "OK":
+                int okSenderId = Integer.parseInt(parts[1]);
+                System.out.println("Node " + nodeId + " received OK message from Node " + okSenderId + ", stopping election.");
+                electionInProgress = false;
+                awaitingNewLeader = true;
+                receivedOK = true;
+                break;
+
+            case "LEADER":
+                leaderId = Integer.parseInt(parts[1]);
+                isLeader = (leaderId == nodeId);
+                electionInProgress = false;
+                awaitingNewLeader = false;
+                System.out.println("Node " + nodeId + " recognizes Node " + leaderId + " as leader.");
+                lastHeartbeatReceived = System.currentTimeMillis();
+                inactiveNodes.clear();
+                break;
+        }
+    }
+
+    private void sendMessageToNode(int targetPort, String message) {
+        try (Socket socket = new Socket("localhost", targetPort);
+             PrintWriter out = new PrintWriter(socket.getOutputStream(), true)) {
+            out.println(message);
+        } catch (IOException e) {
+            System.out.println("Node " + nodeId + " could not connect to Node at port " + targetPort);
+            // More robust handling will be added later
+        }
+    }
+
+    private void initiateElection() {
+        if (electionInProgress || awaitingNewLeader || isLeader) {
+            return;
+        }
+        System.out.println("Node " + nodeId + " initiating election.");
+        leaderId = -1;
+        electionInProgress = true;
+        receivedOK = false;
+        boolean higherNodeFound = false;
+
+        for (int otherPort : otherNodePorts) {
+            if (otherPort > port && !inactiveNodes.contains(otherPort)) {
+                sendMessageToNode(otherPort, "ELECTION:" + nodeId);
+                higherNodeFound = true;
+            }
+        }
+
+        if (!higherNodeFound) {
+            declareAsLeader();
+        } else {
+            new Timer().schedule(new TimerTask() {
+                @Override
+                public void run() {
+                    if (!receivedOK && electionInProgress) {
+                        declareAsLeader();
+                    }
+                }
+            }, ELECTION_BACKOFF);
+        }
+    }
+
+    private void declareAsLeader() {
+        leaderId = nodeId;
+        isLeader = true;
+        electionInProgress = false;
+        awaitingNewLeader = false;
+        System.out.println("Node " + nodeId + " is the new leader.");
+        sendLeaderStatus(); // This method will be added next
+        confirmLeaderStatus(); // This method will be added next
+    }
+
 }
