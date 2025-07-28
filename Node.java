@@ -54,7 +54,7 @@ public class Node {
 
                 String message = in.readLine();
                 if (message != null) {
-                    // handleReceivedMessage(message); // Will be implemented next
+                    handleReceivedMessage(message);
                 }
             } catch (IOException e) {
                     e.printStackTrace();
