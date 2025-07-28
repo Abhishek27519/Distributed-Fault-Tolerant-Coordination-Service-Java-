@@ -129,12 +129,26 @@ public class Node {
     }
 
     private void sendMessageToNode(int targetPort, String message) {
+        inactiveNodes.remove(targetPort);
+        int retryCount = retryCounts.getOrDefault(targetPort, 0);
+
         try (Socket socket = new Socket("localhost", targetPort);
-             PrintWriter out = new PrintWriter(socket.getOutputStream(), true)) {
+            PrintWriter out = new PrintWriter(socket.getOutputStream(), true)) {
             out.println(message);
+            retryCounts.put(targetPort, 0);
         } catch (IOException e) {
-            System.out.println("Node " + nodeId + " could not connect to Node at port " + targetPort);
-            // More robust handling will be added later
+            System.out.println("Node " + nodeId + " could not connect to Node at port " + targetPort + ", retrying...");
+            retryCount++;
+            retryCounts.put(targetPort, retryCount);
+            if (retryCount >= INACTIVITY_THRESHOLD) {
+                inactiveNodes.add(targetPort);
+                System.out.println("Node " + nodeId + " marking Node at port " + targetPort + " as inactive.");
+            }
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException ie) {
+                ie.printStackTrace();
+            }
         }
     }
 
@@ -175,8 +189,8 @@ public class Node {
         electionInProgress = false;
         awaitingNewLeader = false;
         System.out.println("Node " + nodeId + " is the new leader.");
-        sendLeaderStatus(); // This method will be added next
-        confirmLeaderStatus(); // This method will be added next
+        sendLeaderStatus(); 
+        confirmLeaderStatus();
     }
 
     private void sendLeaderStatus() {
