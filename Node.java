@@ -40,7 +40,14 @@ public class Node {
                 initiateElection();
             }
 
-            // Main loop will be added later
+            while (true) {
+                if (isLeader) {
+                    sendLeaderStatus(); // The leader sends status (acts as heartbeat)
+                } else {
+                    checkHeartbeatTimeout();
+                }
+                Thread.sleep(HEARTBEAT_INTERVAL);
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -114,6 +121,10 @@ public class Node {
                 lastHeartbeatReceived = System.currentTimeMillis();
                 inactiveNodes.clear();
                 break;
+                
+            case "HEARTBEAT":
+                lastHeartbeatReceived = System.currentTimeMillis();
+                break;
         }
     }
 
@@ -168,4 +179,31 @@ public class Node {
         confirmLeaderStatus(); // This method will be added next
     }
 
+    private void sendLeaderStatus() {
+        for (int otherPort : otherNodePorts) {
+            if (!inactiveNodes.contains(otherPort)) {
+                sendMessageToNode(otherPort, "LEADER:" + nodeId);
+            }
+        }
+    }
+
+    private void confirmLeaderStatus() {
+        try {
+            Thread.sleep(2000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        System.out.println("Node " + nodeId + " confirmed as leader by all nodes.");
+    }
+
+    private void checkHeartbeatTimeout() {
+        long currentTime = System.currentTimeMillis();
+        if ((currentTime - lastHeartbeatReceived) > TIMEOUT_INTERVAL && !electionInProgress && !awaitingNewLeader) {
+            System.out.println("System Failure Detected.");
+            System.out.println("Node " + nodeId + " failed to receive heartbeat from leader.");
+            System.out.println("Node " + nodeId + " detected that Leader Node " + leaderId + " is inactive. Starting new election.");
+            isLeader = false;
+            initiateElection();
+        }
+    }
 }
